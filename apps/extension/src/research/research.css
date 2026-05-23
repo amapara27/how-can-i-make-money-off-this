@@ -1,0 +1,178 @@
+:root {
+  color: #13201d;
+  background: #f4f7f5;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: #0f766e;
+}
+
+.researchPage {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sourcePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 28px;
+  border-right: 1px solid #dce7e2;
+  background: #ffffff;
+}
+
+.sourcePanel h1,
+.emptyState h1 {
+  margin: 0;
+  color: #142622;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.sourcePanel a {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+blockquote {
+  margin: 12px 0 0;
+  padding: 16px;
+  border-left: 4px solid #14b8a6;
+  border-radius: 8px;
+  background: #eef8f5;
+  color: #283f39;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.workspace {
+  display: grid;
+  align-content: start;
+  gap: 22px;
+  padding: 28px;
+}
+
+.workspaceHeader {
+  display: flex;
+  gap: 16px;
+  align-items: end;
+  justify-content: space-between;
+}
+
+.workspaceHeader h2 {
+  margin: 0;
+  color: #142622;
+  font-size: 30px;
+  line-height: 1.1;
+}
+
+.workspaceHeader span {
+  color: #5d716b;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.sectionGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.researchSection {
+  padding: 18px;
+  border: 1px solid #d8e5e0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.researchSection h3 {
+  margin: 0 0 10px;
+  color: #142622;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.researchSection p {
+  margin: 0 0 14px;
+  color: #50645e;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.researchSection ul {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding-left: 18px;
+  color: #243a35;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.caveats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.caveats span {
+  padding: 6px 9px;
+  border: 1px solid #cbded7;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #526760;
+  font-size: 12px;
+}
+
+.emptyState {
+  display: grid;
+  place-content: center;
+  min-height: 100vh;
+  padding: 28px;
+  text-align: center;
+}
+
+.emptyState p:last-child {
+  max-width: 520px;
+  margin: 14px auto 0;
+  color: #526760;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .researchPage {
+    grid-template-columns: 1fr;
+  }
+
+  .sourcePanel {
+    border-right: 0;
+    border-bottom: 1px solid #dce7e2;
+  }
+
+  .sectionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspaceHeader {
+    align-items: start;
+    flex-direction: column;
+  }
+}

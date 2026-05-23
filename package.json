@@ -1,0 +1,18 @@
+{
+  "name": "how-can-i-make-money-off-this",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Chrome extension and agentic research platform for discovering ways to invest in, bet on, or monetize ideas found around the web.",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

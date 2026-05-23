@@ -1,0 +1,11 @@
+.agent
+
+node_modules
+dist
+build
+.turbo
+.vite
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
