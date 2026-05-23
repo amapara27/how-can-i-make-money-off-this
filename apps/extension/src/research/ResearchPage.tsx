@@ -133,7 +133,8 @@ function buildMockResearch(context: SelectionContext): ResearchResponse {
           `Search for public companies directly tied to "${query}".`,
           "Check supplier, distribution, and infrastructure layers around the category.",
           "Compare pure-play exposure against diversified incumbents."
-        ]
+        ],
+        citations: []
       },
       {
         title: "Prediction and betting markets",
@@ -142,7 +143,8 @@ function buildMockResearch(context: SelectionContext): ResearchResponse {
           "Look for regulatory, launch, adoption, or revenue milestones.",
           "Translate vague trends into dates, thresholds, and measurable outcomes.",
           "Separate entertainment bets from markets with enough liquidity to matter."
-        ]
+        ],
+        citations: []
       },
       {
         title: "Business opportunities",
@@ -151,9 +153,12 @@ function buildMockResearch(context: SelectionContext): ResearchResponse {
           "Identify underserved buyer personas and painful manual workflows.",
           "Look for affiliate, lead generation, data product, and B2B service angles.",
           "Validate willingness to pay before building a full product."
-        ]
+        ],
+        citations: []
       }
     ],
+    mode: "mock",
+    sources: [],
     caveats: [
       "Mocked output",
       "Not financial advice",

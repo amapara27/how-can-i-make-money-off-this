@@ -10,7 +10,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@how-money/shared": "workspace:*"
+    "@anthropic-ai/sdk": "^0.98.0",
+    "@how-money/shared": "workspace:*",
+    "@tavily/core": "^0.7.3",
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "@types/node": "^22.15.21",

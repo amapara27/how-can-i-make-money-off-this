@@ -1,23 +1,34 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { ResearchRequest, ResearchResponse } from "@how-money/shared";
+import type { ResearchRequest } from "@how-money/shared";
+import { getConfig, type AppConfig } from "./config.js";
+import { ResearchConfigurationError, runResearchAgent } from "./research/agent.js";
 
-const PORT = Number.parseInt(process.env.PORT ?? "8787", 10);
+const config = getConfig();
 
 const server = createServer(async (request, response) => {
   try {
-    await routeRequest(request, response);
+    await routeRequest(request, response, config);
   } catch (error) {
+    if (error instanceof ResearchConfigurationError) {
+      writeJson(response, 503, { error: error.message });
+      return;
+    }
+
     writeJson(response, 500, {
       error: error instanceof Error ? error.message : "Unexpected server error"
     });
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Research API listening on http://localhost:${PORT}`);
+server.listen(config.port, () => {
+  console.log(`Research API listening on http://localhost:${config.port}`);
 });
 
-async function routeRequest(request: IncomingMessage, response: ServerResponse) {
+async function routeRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  appConfig: AppConfig
+) {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
   if (request.method === "OPTIONS") {
@@ -28,13 +39,17 @@ async function routeRequest(request: IncomingMessage, response: ServerResponse) 
   if (request.method === "GET" && url.pathname === "/health") {
     writeJson(response, 200, {
       status: "ok",
-      service: "@how-money/api"
+      service: "@how-money/api",
+      model: appConfig.anthropicModel,
+      tavilyConfigured: Boolean(appConfig.tavilyApiKey),
+      anthropicConfigured: Boolean(appConfig.anthropicApiKey),
+      mockResearchEnabled: appConfig.allowMockResearch
     });
     return;
   }
 
   if (request.method === "POST" && url.pathname === "/research") {
-    const body = await readJson<Partial<ResearchRequest>>(request);
+    const body = await readJson<Partial<ResearchRequest>>(request, 1_000_000);
     const validationError = validateResearchRequest(body);
 
     if (validationError) {
@@ -42,7 +57,8 @@ async function routeRequest(request: IncomingMessage, response: ServerResponse) 
       return;
     }
 
-    writeJson(response, 200, buildMockResearch(body as ResearchRequest));
+    const research = await runResearchAgent(body as ResearchRequest, appConfig);
+    writeJson(response, 200, research);
     return;
   }
 
@@ -67,58 +83,28 @@ function validateResearchRequest(body: Partial<ResearchRequest>) {
   return null;
 }
 
-function buildMockResearch(request: ResearchRequest): ResearchResponse {
-  const query = request.selectedText.trim();
-
-  return {
-    query,
-    generatedAt: new Date().toISOString(),
-    sections: [
-      {
-        title: "Public market exposure",
-        summary: "Potential public equities, funds, and suppliers connected to the selected topic.",
-        bullets: [
-          `Find listed companies with revenue exposure to "${query}".`,
-          "Check adjacent suppliers, infrastructure providers, and distribution channels.",
-          "Compare direct exposure against broader thematic ETFs."
-        ]
-      },
-      {
-        title: "Prediction market framing",
-        summary: "Ways to translate the idea into measurable events or adoption milestones.",
-        bullets: [
-          "Define a dated outcome with a source of truth.",
-          "Look for launch, regulation, revenue, partnership, or market-share catalysts.",
-          "Check liquidity and market rules before treating prices as useful signals."
-        ]
-      },
-      {
-        title: "Operator opportunities",
-        summary: "Business models that could monetize demand, attention, data, or workflow gaps.",
-        bullets: [
-          "Map the buyer, budget owner, and repeated pain around the topic.",
-          "Consider affiliate, data, workflow automation, and expert-service offers.",
-          "Validate demand with customer conversations before building."
-        ]
-      }
-    ],
-    caveats: [
-      "Mocked output",
-      "Not financial advice",
-      `Source: ${request.page.title || request.page.url}`
-    ]
-  };
-}
-
-async function readJson<T>(request: IncomingMessage): Promise<T> {
+async function readJson<T>(request: IncomingMessage, maxBytes: number): Promise<T> {
   const chunks: Buffer[] = [];
+  let totalBytes = 0;
 
   for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.byteLength;
+
+    if (totalBytes > maxBytes) {
+      throw new Error("Request body is too large.");
+    }
+
+    chunks.push(buffer);
   }
 
   const rawBody = Buffer.concat(chunks).toString("utf8");
-  return rawBody ? JSON.parse(rawBody) as T : {} as T;
+
+  try {
+    return rawBody ? JSON.parse(rawBody) as T : {} as T;
+  } catch {
+    throw new Error("Request body must be valid JSON.");
+  }
 }
 
 function writeJson(response: ServerResponse, statusCode: number, data: unknown) {

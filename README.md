@@ -47,4 +47,16 @@ The API exposes:
 - `GET /health`
 - `POST /research`
 
-`POST /research` currently returns mocked research output. Real LLM calls, scraping, citation gathering, and job orchestration should be added behind this API boundary.
+`POST /research` runs a small research agent:
+
+1. Claude plans web search queries from the highlighted text.
+2. Tavily searches and extracts source content from the web.
+3. Claude synthesizes a structured response with citations.
+
+Create `apps/api/.env` from `apps/api/.env.example` and set:
+
+- `ANTHROPIC_API_KEY`
+- `TAVILY_API_KEY`
+- `ANTHROPIC_MODEL`, defaulting to `claude-sonnet-4-6`
+
+For local development without credentials, set `RESEARCH_ALLOW_MOCK=true`.
