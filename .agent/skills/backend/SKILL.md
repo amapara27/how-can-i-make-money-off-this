@@ -267,6 +267,8 @@ max_batch_size = 1          # one job at a time per consumer instance
 max_retries    = 3
 ```
 
+create a mock env example document and perform mock requests before i test out real ones after placing the correct variables
+
 ---
 
 ## Reference files
