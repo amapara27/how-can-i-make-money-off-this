@@ -9,9 +9,6 @@ export default defineConfig({
     outDir: "dist",
     rollupOptions: {
       input: {
-        popup: resolve(__dirname, "popup.html"),
-        research: resolve(__dirname, "research.html"),
-        background: resolve(__dirname, "src/background.ts"),
         content: resolve(__dirname, "src/content.ts")
       },
       output: {
