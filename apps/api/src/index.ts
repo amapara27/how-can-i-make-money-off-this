@@ -1,23 +1,30 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { ResearchRequest, ResearchResponse } from "@how-money/shared";
+import type { CreateResearchJobResponse, ResearchInput } from "@how-money/shared";
+import { createJobStore } from "./research/jobs.js";
+import { runResearchJob } from "./research/orchestrator.js";
+import { validateResearchInput } from "./research/validation.js";
 
 const PORT = Number.parseInt(process.env.PORT ?? "8787", 10);
+const jobs = createJobStore();
 
-const server = createServer(async (request, response) => {
+export const server = createServer(async (request, response) => {
   try {
     await routeRequest(request, response);
   } catch (error) {
+    console.error("Unhandled API error", error);
     writeJson(response, 500, {
       error: error instanceof Error ? error.message : "Unexpected server error"
     });
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Research API listening on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== "test") {
+  server.listen(PORT, () => {
+    console.log(`Research API listening on http://localhost:${PORT}`);
+  });
+}
 
-async function routeRequest(request: IncomingMessage, response: ServerResponse) {
+export async function routeRequest(request: IncomingMessage, response: ServerResponse) {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
   if (request.method === "OPTIONS") {
@@ -34,80 +41,46 @@ async function routeRequest(request: IncomingMessage, response: ServerResponse) 
   }
 
   if (request.method === "POST" && url.pathname === "/research") {
-    const body = await readJson<Partial<ResearchRequest>>(request);
-    const validationError = validateResearchRequest(body);
+    const body = await readJson<Partial<ResearchInput>>(request);
+    const validation = validateResearchInput(body);
 
-    if (validationError) {
-      writeJson(response, 400, { error: validationError });
+    if (!validation.ok) {
+      writeJson(response, 400, { error: validation.error });
       return;
     }
 
-    writeJson(response, 200, buildMockResearch(body as ResearchRequest));
+    const job = jobs.create(validation.input);
+    queueMicrotask(() => {
+      void runResearchJob(job.jobId, validation.input, jobs, process.env).catch((error: unknown) => {
+        console.error("Research job failed", { jobId: job.jobId, error });
+        jobs.fail(job.jobId, error instanceof Error ? error.message : "Research failed.");
+      });
+    });
+
+    const payload: CreateResearchJobResponse = {
+      jobId: job.jobId,
+      status: job.status
+    };
+    writeJson(response, 202, payload);
+    return;
+  }
+
+  const researchMatch = /^\/research\/([^/]+)$/.exec(url.pathname);
+  if (request.method === "GET" && researchMatch) {
+    const job = jobs.get(decodeURIComponent(researchMatch[1]));
+
+    if (!job) {
+      writeJson(response, 404, { error: "Research job not found." });
+      return;
+    }
+
+    writeJson(response, 200, job);
     return;
   }
 
   writeJson(response, 404, {
     error: "Route not found"
   });
-}
-
-function validateResearchRequest(body: Partial<ResearchRequest>) {
-  if (!body || typeof body !== "object") {
-    return "Request body must be a JSON object.";
-  }
-
-  if (typeof body.selectedText !== "string" || body.selectedText.trim().length < 2) {
-    return "selectedText must be at least two characters.";
-  }
-
-  if (!body.page || typeof body.page.url !== "string" || typeof body.page.title !== "string") {
-    return "page.url and page.title are required.";
-  }
-
-  return null;
-}
-
-function buildMockResearch(request: ResearchRequest): ResearchResponse {
-  const query = request.selectedText.trim();
-
-  return {
-    query,
-    generatedAt: new Date().toISOString(),
-    sections: [
-      {
-        title: "Public market exposure",
-        summary: "Potential public equities, funds, and suppliers connected to the selected topic.",
-        bullets: [
-          `Find listed companies with revenue exposure to "${query}".`,
-          "Check adjacent suppliers, infrastructure providers, and distribution channels.",
-          "Compare direct exposure against broader thematic ETFs."
-        ]
-      },
-      {
-        title: "Prediction market framing",
-        summary: "Ways to translate the idea into measurable events or adoption milestones.",
-        bullets: [
-          "Define a dated outcome with a source of truth.",
-          "Look for launch, regulation, revenue, partnership, or market-share catalysts.",
-          "Check liquidity and market rules before treating prices as useful signals."
-        ]
-      },
-      {
-        title: "Operator opportunities",
-        summary: "Business models that could monetize demand, attention, data, or workflow gaps.",
-        bullets: [
-          "Map the buyer, budget owner, and repeated pain around the topic.",
-          "Consider affiliate, data, workflow automation, and expert-service offers.",
-          "Validate demand with customer conversations before building."
-        ]
-      }
-    ],
-    caveats: [
-      "Mocked output",
-      "Not financial advice",
-      `Source: ${request.page.title || request.page.url}`
-    ]
-  };
 }
 
 async function readJson<T>(request: IncomingMessage): Promise<T> {
