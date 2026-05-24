@@ -12,8 +12,9 @@ Have you ever seen something cool and wondered how you could invest in or bet on
 
 1. Highlight text on any webpage.
 2. Click the inline "Research money angles" activation button.
-3. The extension stores the selected text and page metadata in `chrome.storage.session`.
-4. A new bundled `research.html` extension page opens with a mocked research workspace.
+3. The extension submits the selected text and page metadata to the local research API.
+4. The inline panel polls the backend job and renders live agent output.
+5. Open the bundled `research.html` report for the full research workspace.
 
 ## Getting Started
 
@@ -46,5 +47,6 @@ The API exposes:
 
 - `GET /health`
 - `POST /research`
+- `GET /research/:jobId`
 
-`POST /research` currently returns mocked research output. Real LLM calls, scraping, citation gathering, and job orchestration should be added behind this API boundary.
+`POST /research` creates an async research job. The extension polls `GET /research/:jobId` for LLM synthesis, agent insights, provider results, sources, caveats, and verified asset data.

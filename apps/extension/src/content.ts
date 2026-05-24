@@ -1,6 +1,12 @@
+import type { CreateResearchJobResponse, ResearchInput, ResearchJob, ResearchResult, SelectionContext } from "@how-money/shared";
+import type { ExtensionResponseMessage } from "./messages";
+
 const ROOT_ID = "hcimot-extension-root";
 const MIN_SELECTION_LENGTH = 2;
 const TRIGGER_TEXT = "How Can You Make Money Off This?";
+const OPEN_RESEARCH_REPORT = "OPEN_RESEARCH_REPORT";
+const DEFAULT_API_BASE_URL = "http://localhost:8787";
+const API_BASE_URL = (import.meta.env.VITE_RESEARCH_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/+$/, "");
 
 type CaptureKind = "text" | "image";
 
@@ -13,14 +19,17 @@ type Capture = {
   pageTitle: string;
 };
 
-type PanelState = "loading" | "ready";
+type PanelState =
+  | { status: "loading"; requestId: string; stage: ResearchJob["stage"] }
+  | { status: "ready"; requestId: string; result: ResearchResult }
+  | { status: "error"; requestId?: string; message: string };
 
 let host: HTMLDivElement | null = null;
 let shadow: ShadowRoot | null = null;
 let triggerButton: HTMLButtonElement | null = null;
 let panel: HTMLElement | null = null;
 let activeCapture: Capture | null = null;
-let researchTimer: number | undefined;
+let researchController: AbortController | null = null;
 
 document.addEventListener("pointerup", (event) => {
   if (isExtensionEvent(event)) {
@@ -243,15 +252,230 @@ function activateExtension() {
     return;
   }
 
-  window.clearTimeout(researchTimer);
-  hideTrigger();
-  renderPanel(activeCapture, "loading");
+  void startResearch(activeCapture);
+}
 
-  researchTimer = window.setTimeout(() => {
-    if (activeCapture) {
-      renderPanel(activeCapture, "ready");
+async function startResearch(capture: Capture) {
+  researchController?.abort();
+  researchController = new AbortController();
+  hideTrigger();
+  const requestId = crypto.randomUUID();
+  const context = await buildSelectionContext(capture, requestId);
+
+  await saveResearchSession(requestId, { context });
+  renderPanel(capture, { status: "loading", requestId, stage: "queued" });
+
+  try {
+    const created = await createResearchJob(toResearchInput(context), researchController.signal);
+    await updateResearchSession(requestId, { jobId: created.jobId });
+
+    const job = await pollResearchJob(created.jobId, {
+      signal: researchController.signal,
+      onUpdate: (updatedJob) => {
+        void updateResearchSession(requestId, { job: updatedJob });
+
+        if (updatedJob.status === "failed") {
+          renderPanel(capture, {
+            status: "error",
+            requestId,
+            message: updatedJob.error ?? "Research failed."
+          });
+          return;
+        }
+
+        if (updatedJob.result) {
+          renderPanel(capture, {
+            status: "ready",
+            requestId,
+            result: updatedJob.result
+          });
+          return;
+        }
+
+        renderPanel(capture, {
+          status: "loading",
+          requestId,
+          stage: updatedJob.stage
+        });
+      }
+    });
+
+    await updateResearchSession(requestId, { job });
+
+    if (job.status === "failed") {
+      renderPanel(capture, {
+        status: "error",
+        requestId,
+        message: job.error ?? "Research failed."
+      });
+      return;
     }
-  }, 900);
+
+    if (job.result) {
+      renderPanel(capture, {
+        status: "ready",
+        requestId,
+        result: job.result
+      });
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return;
+    }
+
+    renderPanel(capture, {
+      status: "error",
+      requestId,
+      message: error instanceof Error ? error.message : "Unable to reach the research API."
+    });
+  }
+}
+
+async function buildSelectionContext(capture: Capture, requestId: string): Promise<SelectionContext> {
+  const image = capture.kind === "image" && capture.imageUrl
+    ? await imageUrlToHighlight(capture.imageUrl, capture.excerpt)
+    : undefined;
+
+  return {
+    id: requestId,
+    selectedText: capture.excerpt,
+    image,
+    page: {
+      url: capture.pageUrl,
+      title: capture.pageTitle
+    },
+    capturedAt: new Date().toISOString()
+  };
+}
+
+function toResearchInput(context: SelectionContext): ResearchInput {
+  return {
+    selectedText: context.selectedText,
+    image: context.image,
+    page: context.page
+  };
+}
+
+async function createResearchJob(input: ResearchInput, signal?: AbortSignal): Promise<CreateResearchJobResponse> {
+  return fetchJson<CreateResearchJobResponse>("/research", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input),
+    signal
+  });
+}
+
+async function pollResearchJob(
+  jobId: string,
+  options: {
+    signal?: AbortSignal;
+    onUpdate?: (job: ResearchJob) => void;
+  } = {}
+) {
+  while (true) {
+    const job = await fetchJson<ResearchJob>(`/research/${encodeURIComponent(jobId)}`, {
+      signal: options.signal
+    });
+    options.onUpdate?.(job);
+
+    if (job.status === "complete" || job.status === "failed") {
+      return job;
+    }
+
+    await delay(1200, options.signal);
+  }
+}
+
+async function fetchJson<T>(path: string, init: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, init);
+  const text = await response.text();
+  const data = text ? JSON.parse(text) as T | { error?: string } : {};
+
+  if (!response.ok) {
+    const message = typeof data === "object" && data && "error" in data && data.error
+      ? data.error
+      : `Research API returned ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return data as T;
+}
+
+function delay(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Polling was cancelled.", "AbortError"));
+      return;
+    }
+
+    const timeout = window.setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      window.clearTimeout(timeout);
+      reject(new DOMException("Polling was cancelled.", "AbortError"));
+    }, { once: true });
+  });
+}
+
+async function saveResearchSession(requestId: string, session: { context: SelectionContext; jobId?: string; job?: ResearchJob }) {
+  await chrome.storage.session.set({
+    [storageKey(requestId)]: session
+  });
+}
+
+async function updateResearchSession(requestId: string, patch: { jobId?: string; job?: ResearchJob }) {
+  const key = storageKey(requestId);
+  const result = await chrome.storage.session.get(key);
+  const current = result[key] as { context: SelectionContext; jobId?: string; job?: ResearchJob } | undefined;
+
+  if (!current) {
+    return;
+  }
+
+  await chrome.storage.session.set({
+    [key]: {
+      ...current,
+      ...patch
+    }
+  });
+}
+
+function storageKey(requestId: string) {
+  return `research:${requestId}`;
+}
+
+async function imageUrlToHighlight(imageUrl: string, altText: string) {
+  try {
+    const response = await fetch(imageUrl);
+
+    if (!response.ok) {
+      return undefined;
+    }
+
+    const blob = await response.blob();
+
+    if (!blob.type.startsWith("image/")) {
+      return undefined;
+    }
+
+    return {
+      dataUrl: await blobToDataUrl(blob),
+      mimeType: blob.type,
+      altText
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("Unable to read selected image.")));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function renderPanel(capture: Capture, state: PanelState) {
@@ -269,7 +493,7 @@ function renderPanel(capture: Capture, state: PanelState) {
     buildCapturePreview(capture),
     buildMetrics(state),
     buildMoneyAngles(capture, state),
-    buildFooter()
+    buildFooter(state)
   );
   panel.hidden = false;
 }
@@ -288,7 +512,7 @@ function buildPanelHeader(capture: Capture, state: PanelState) {
 
   const running = document.createElement("span");
   running.className = "hcimot-running";
-  running.innerHTML = `<span></span>${state === "loading" ? "agents running" : "research ready"}`;
+  running.append(document.createElement("span"), document.createTextNode(getPanelStatusText(state)));
 
   copy.append(source, title, running);
 
@@ -298,12 +522,24 @@ function buildPanelHeader(capture: Capture, state: PanelState) {
   close.textContent = "Close";
   close.setAttribute("aria-label", "Close research panel");
   close.addEventListener("click", () => {
-    window.clearTimeout(researchTimer);
+    researchController?.abort();
     panel?.setAttribute("hidden", "");
   });
 
   header.append(copy, close);
   return header;
+}
+
+function getPanelStatusText(state: PanelState) {
+  if (state.status === "ready") {
+    return "research ready";
+  }
+
+  if (state.status === "error") {
+    return "research unavailable";
+  }
+
+  return formatStage(state.stage);
 }
 
 function buildCapturePreview(capture: Capture) {
@@ -329,19 +565,25 @@ function buildMetrics(state: PanelState) {
   metrics.className = "hcimot-metrics";
   metrics.setAttribute("aria-label", "Research metrics");
 
-  const metricData =
-    state === "loading"
+  const metricData = state.status === "ready"
+    ? [
+        ["Trend", `${state.result.thesis.trendScore}/100`],
+        ["Investability", titleCase(state.result.topic.investability)],
+        ["Horizon", state.result.thesis.timeHorizon],
+        ["Sources", String(state.result.sources.length)]
+      ]
+    : state.status === "error"
       ? [
+          ["Trend", "unavailable"],
+          ["Investability", "unavailable"],
+          ["Horizon", "unavailable"],
+          ["Sources", "unavailable"]
+        ]
+      : [
           ["Trend", "scanning"],
           ["Investability", "pricing"],
           ["Horizon", "mapping"],
-          ["Sources", "queued"]
-        ]
-      : [
-          ["Trend", "72/100"],
-          ["Investability", "Medium"],
-          ["Horizon", "6-18 mo"],
-          ["Sources", "18"]
+          ["Sources", formatStage(state.stage)]
         ];
 
   for (const [label, value] of metricData) {
@@ -361,8 +603,8 @@ function buildMoneyAngles(capture: Capture, state: PanelState) {
   const section = document.createElement("section");
   section.className = "hcimot-angles";
 
-  if (state === "loading") {
-    for (const label of ["Direct exposure", "ETF routes", "Business angle"]) {
+  if (state.status === "loading") {
+    for (const label of ["Direct exposure", "Market routes", "Business angle"]) {
       const row = document.createElement("article");
       row.className = "hcimot-angle hcimot-angleLoading";
       const title = document.createElement("h3");
@@ -374,24 +616,37 @@ function buildMoneyAngles(capture: Capture, state: PanelState) {
     return section;
   }
 
-  const topic = capture.kind === "image" ? "this image" : `"${capture.title}"`;
-  const data = [
-    {
-      title: "Direct exposure",
-      value: "NVDA +1.8%",
-      text: `Look for public companies selling picks and shovels into ${topic}, then separate hype from revenue exposure.`
-    },
-    {
-      title: "ETF routes",
-      value: "BOTZ 64%",
-      text: "Use relevance bars for broad baskets. Convenient, but the pure-play signal gets diluted fast."
-    },
-    {
-      title: "Business angle",
-      value: "$49/mo",
-      text: "Turn repeated curiosity into a paid brief, lead list, or workflow tool before building anything heroic."
-    }
-  ];
+  if (state.status === "error") {
+    const row = document.createElement("article");
+    row.className = "hcimot-angle";
+
+    const title = document.createElement("h3");
+    title.textContent = "Research unavailable";
+
+    const text = document.createElement("p");
+    text.textContent = state.message;
+
+    row.append(title, text);
+    section.appendChild(row);
+    section.appendChild(buildOpenReportButton(state.requestId));
+    return section;
+  }
+
+  const data = getInlineAngles(state.result, capture);
+
+  if (!state.result.isActionable && data.length === 0) {
+    const row = document.createElement("article");
+    row.className = "hcimot-angle";
+
+    const title = document.createElement("h3");
+    title.textContent = "No verified angle";
+
+    const text = document.createElement("p");
+    text.textContent = state.result.topic.investabilityReason;
+
+    row.append(title, text);
+    section.appendChild(row);
+  }
 
   for (const item of data) {
     const row = document.createElement("article");
@@ -411,8 +666,79 @@ function buildMoneyAngles(capture: Capture, state: PanelState) {
     section.appendChild(row);
   }
 
-  section.appendChild(buildRiskMeter());
+  section.appendChild(buildRiskMeter(state.result.thesis.riskLevel, state.result.thesis.bearCase));
+  section.appendChild(buildOpenReportButton(state.requestId));
   return section;
+}
+
+function getInlineAngles(result: ResearchResult, capture: Capture) {
+  const opportunities = result.opportunities.slice(0, 3).map((opportunity) => ({
+    title: opportunity.title,
+    value: `${titleCase(opportunity.confidence)} ${opportunity.type}`,
+    text: opportunity.rationale
+  }));
+
+  if (opportunities.length > 0) {
+    return opportunities;
+  }
+
+  const assetAngles = [
+    ...result.assets.equities.slice(0, 2).map((asset) => ({
+      title: `${asset.ticker} ${asset.name}`,
+      value: formatPercent(asset.dayChangePercent) ?? `${asset.relevanceScore}/100`,
+      text: asset.rationale
+    })),
+    ...result.assets.crypto.slice(0, 2).map((asset) => ({
+      title: `${asset.symbol} ${asset.name}`,
+      value: formatCurrency(asset.priceUsd) ?? `${asset.relevanceScore}/100`,
+      text: asset.rationale
+    }))
+  ];
+
+  if (assetAngles.length > 0) {
+    return assetAngles.slice(0, 3);
+  }
+
+  const topic = capture.kind === "image" ? "this image" : `"${capture.title}"`;
+
+  return result.howToGetIn.slice(0, 3).map((step, index) => ({
+    title: index === 0 ? "How to get in" : "Next step",
+    value: result.isActionable ? titleCase(result.topic.investability) : "Low",
+    text: step || `Research ${topic} further before acting.`
+  }));
+}
+
+function buildOpenReportButton(requestId?: string) {
+  const button = document.createElement("button");
+  button.className = "hcimot-reportButton";
+  button.type = "button";
+  button.textContent = "Open full report";
+  button.disabled = !requestId;
+  button.addEventListener("click", () => {
+    if (!requestId) {
+      return;
+    }
+
+    void chrome.runtime.sendMessage(
+      { type: OPEN_RESEARCH_REPORT, requestId },
+      (response?: ExtensionResponseMessage) => {
+        if (response && "ok" in response && !response.ok) {
+          renderPanel(activeCapture ?? {
+            kind: "text",
+            title: "Research report",
+            excerpt: response.error,
+            pageUrl: window.location.href,
+            pageTitle: document.title
+          }, {
+            status: "error",
+            requestId,
+            message: response.error
+          });
+        }
+      }
+    );
+  });
+  return button;
 }
 
 function buildSkeleton() {
@@ -421,35 +747,38 @@ function buildSkeleton() {
   return skeleton;
 }
 
-function buildRiskMeter() {
+function buildRiskMeter(riskLevel: ResearchResult["thesis"]["riskLevel"], bearCase: string) {
   const risk = document.createElement("article");
   risk.className = "hcimot-risk";
 
   const label = document.createElement("span");
-  label.textContent = "Risk";
+  label.textContent = `${titleCase(riskLevel)} risk`;
 
   const blocks = document.createElement("div");
-  blocks.setAttribute("aria-label", "Risk is 3 out of 5");
+  const filledBlocks = riskLevel === "low" ? 1 : riskLevel === "medium" ? 3 : 5;
+  blocks.setAttribute("aria-label", `Risk is ${filledBlocks} out of 5`);
 
   for (let index = 0; index < 5; index += 1) {
     const block = document.createElement("i");
-    if (index < 3) {
+    if (index < filledBlocks) {
       block.className = "is-filled";
     }
     blocks.appendChild(block);
   }
 
   const copy = document.createElement("p");
-  copy.textContent = "Promising enough to research. Still allergic to vibes-only conviction.";
+  copy.textContent = bearCase;
 
   risk.append(label, blocks, copy);
   return risk;
 }
 
-function buildFooter() {
+function buildFooter(state: PanelState) {
   const footer = document.createElement("footer");
   footer.className = "hcimot-footer";
-  footer.textContent = "Research, not advice. Prices and tickers are placeholder UI until agents are connected.";
+  footer.textContent = state.status === "ready"
+    ? state.result.caveats.join(" ")
+    : "Research, not advice. Backend agents are checking sources and market data.";
   return footer;
 }
 
@@ -744,6 +1073,21 @@ function ensureRoot() {
       font-size: 12px;
     }
 
+    .hcimot-reportButton {
+      min-height: 36px;
+      border: 1px solid #d6ff62;
+      border-radius: 8px;
+      background: #d6ff62;
+      color: #10140d;
+      font: 600 13px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+      cursor: pointer;
+    }
+
+    .hcimot-reportButton:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
     .hcimot-footer {
       color: #777777;
       font-size: 11px;
@@ -800,6 +1144,34 @@ function isExtensionEvent(event: Event) {
 function summarizeText(value: string) {
   const compact = value.replace(/\s+/g, " ").trim();
   return compact.length > 78 ? `${compact.slice(0, 75)}...` : compact;
+}
+
+function formatStage(stage: ResearchJob["stage"]) {
+  return stage.replace(/-/g, " ");
+}
+
+function titleCase(value: string) {
+  return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatCurrency(value: number | undefined) {
+  if (typeof value !== "number") {
+    return undefined;
+  }
+
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: value >= 100 ? 0 : 2
+  }).format(value);
+}
+
+function formatPercent(value: number | undefined) {
+  if (typeof value !== "number") {
+    return undefined;
+  }
+
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
 function getHostname(url: string) {

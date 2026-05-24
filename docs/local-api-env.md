@@ -2,6 +2,8 @@
 
 The local Node backend runs without real API keys by default. Missing providers use conservative mock mode where only a tiny allowlist of well-known assets can be returned, and every result includes a caveat that mock provider mode is active.
 
+At startup, `apps/api` automatically loads environment variables from `apps/.env`. Existing shell environment variables take priority over values in that file.
+
 ## Environment Variables
 
 ```sh
@@ -63,4 +65,4 @@ If `HCIMOT_MOCK_PROVIDERS=false` and real provider keys are absent, the backend 
 
 ## Extension Note
 
-The current content script captures highlighted text only. The backend contract already accepts an optional `image` payload, so image capture can be added to the extension later without changing the API shape.
+The extension submits highlighted text immediately. Image selections pass alt text and attempt a best-effort `dataUrl` capture; cross-origin images may fall back to text-only context when the browser blocks the fetch.

@@ -4,8 +4,15 @@
   "description": "Highlight text on any page and open an agentic research workspace for monetization and investing angles.",
   "version": "0.1.0",
   "action": {
+    "default_popup": "popup.html",
     "default_title": "How Can I Make Money Off This"
   },
+  "background": {
+    "service_worker": "assets/background.js",
+    "type": "module"
+  },
+  "permissions": ["storage"],
+  "host_permissions": ["http://localhost:8787/*", "http://127.0.0.1:8787/*"],
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

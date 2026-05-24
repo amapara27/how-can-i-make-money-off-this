@@ -1,8 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { CreateResearchJobResponse, ResearchInput } from "@how-money/shared";
+import { loadAppsEnv } from "./env.js";
 import { createJobStore } from "./research/jobs.js";
 import { runResearchJob } from "./research/orchestrator.js";
 import { validateResearchInput } from "./research/validation.js";
+
+loadAppsEnv();
 
 const PORT = Number.parseInt(process.env.PORT ?? "8787", 10);
 const jobs = createJobStore();
@@ -41,7 +44,19 @@ export async function routeRequest(request: IncomingMessage, response: ServerRes
   }
 
   if (request.method === "POST" && url.pathname === "/research") {
-    const body = await readJson<Partial<ResearchInput>>(request);
+    let body: Partial<ResearchInput>;
+
+    try {
+      body = await readJson<Partial<ResearchInput>>(request);
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        writeJson(response, 400, { error: "Request body must be valid JSON." });
+        return;
+      }
+
+      throw error;
+    }
+
     const validation = validateResearchInput(body);
 
     if (!validation.ok) {
