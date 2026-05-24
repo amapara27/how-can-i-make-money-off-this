@@ -1,52 +1,48 @@
-# how-can-i-make-money-off-this
+# How Can I Make Money Off This?
 
-Have you ever seen something cool and wondered how you could invest in or bet on something like it?
+Have you come acrosss something on the internet and wondered how you could make some money out of it? This is exactly what this app does. 
 
-## Apps
+It's a Chrome extension for turning everyday internet curiosity into investable, bettable, or monetizable research.
 
-- `apps/extension`: Chrome Manifest V3 extension built with React, Vite, and TypeScript.
-- `apps/api`: Node API scaffold for LLM and scraping orchestration.
-- `packages/shared`: shared request and response types.
+Highlight something on a webpage, click **How Can You Make Money Off This?**, and the extension researches possible money angles behind it. It looks for public-market exposure, crypto exposure, market signals, related news, source-backed opportunities, and reasons the idea may not be actionable.
 
-## Extension Workflow
+## What It Does
 
-1. Highlight text on any webpage.
-2. Click the inline "Research money angles" activation button.
-3. The extension submits the selected text and page metadata to the local research API.
-4. The inline panel polls the backend job and renders live agent output.
-5. Open the bundled `research.html` report for the full research workspace.
+The extension helps answer questions like:
 
-## Getting Started
+- Is there a public company tied to this trend?
+- Is there a crypto asset or on-chain angle connected to it?
+- Are there recent news, filings, or market signals worth checking?
+- Is this actually investable, or just internet noise?
+- Are there business opportunities around the idea instead of a trade?
 
-```sh
-pnpm install
-pnpm build
-```
+## How It Works
 
-To develop the extension:
+1. Highlight text or select an image on a webpage.
+2. Click the inline research button.
+3. Review a quick summary in the page.
+4. Open the full report for assets, thesis, risks, sources, and next steps.
 
-```sh
-pnpm --filter @how-money/extension dev
-```
+Each report is designed to separate real exposure from loose association. If the system cannot verify a realistic way to act on the idea, it says so instead of forcing a fake answer.
 
-To build and load it in Chrome:
+## What You Get
 
-```sh
-pnpm --filter @how-money/extension build
-```
+- **Investability score** for the highlighted idea
+- **Verified assets** such as stocks or crypto tokens when available
+- **Bull and bear cases** for the thesis
+- **Risk breakdown** across timing, technology, and regulatory factors
+- **How to get in** steps for further research
+- **Agent insights** from market data, news, filings, and web sources
+- **Citations and caveats** so you can inspect the evidence yourself
 
-Then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `apps/extension/dist`.
+## Built For
 
-To run the API:
+People who constantly see products, trends, memes, companies, technologies, or cultural moments online and wonder:
 
-```sh
-pnpm --filter @how-money/api dev
-```
+> “Is there a way to make money from this?”
 
-The API exposes:
+It is meant for idea discovery and research acceleration, not blind recommendations.
 
-- `GET /health`
-- `POST /research`
-- `GET /research/:jobId`
+## Important Note
 
-`POST /research` creates an async research job. The extension polls `GET /research/:jobId` for LLM synthesis, agent insights, provider results, sources, caveats, and verified asset data.
+This is not financial advice. The extension is a research tool that surfaces possible angles and supporting evidence. Always verify sources, understand the risks, and make your own decisions.
