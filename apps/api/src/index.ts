@@ -1,11 +1,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { CreateResearchJobResponse, ResearchInput } from "@how-money/shared";
-import { loadAppsEnv } from "./env.js";
+import dotenv from "dotenv";
 import { createJobStore } from "./research/jobs.js";
 import { runResearchJob } from "./research/orchestrator.js";
 import { validateResearchInput } from "./research/validation.js";
 
-loadAppsEnv();
+dotenv.config({
+  path: resolve(dirname(fileURLToPath(import.meta.url)), "../../.env"),
+  quiet: true
+});
 
 const PORT = Number.parseInt(process.env.PORT ?? "8787", 10);
 const jobs = createJobStore();

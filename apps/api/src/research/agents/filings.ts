@@ -26,7 +26,7 @@ export async function runFilingsAgent(
     sources: results.map((result) => ({
       title: result.title,
       url: result.url,
-      provider: result.url.startsWith("mock://") ? "mock" : "tavily",
+      provider: "tavily",
       publishedAt: result.published_date,
       excerpt: result.content
     }))

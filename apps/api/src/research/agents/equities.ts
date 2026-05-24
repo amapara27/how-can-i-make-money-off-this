@@ -18,7 +18,7 @@ export async function runEquitiesAgent(
     sources: assets.map<ResearchSource>((asset) => ({
       title: `${asset.ticker} market data`,
       url: `https://www.polygon.io/tickers/${asset.ticker}`,
-      provider: env.POLYGON_API_KEY ? "polygon" : "mock",
+      provider: "polygon",
       excerpt: asset.rationale
     }))
   };

@@ -18,7 +18,7 @@ export async function runCryptoAgent(
     sources: assets.map<ResearchSource>((asset) => ({
       title: `${asset.name} CoinGecko data`,
       url: `https://www.coingecko.com/en/coins/${asset.coinGeckoId}`,
-      provider: env.COINGECKO_API_KEY ? "coingecko" : "mock",
+      provider: "coingecko",
       excerpt: asset.rationale
     }))
   };

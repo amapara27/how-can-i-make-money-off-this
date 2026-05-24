@@ -1,7 +1,6 @@
 import type { CryptoAsset } from "@how-money/shared";
 import type { ResearchEnv } from "../types.js";
 import { fetchJsonWithTimeout } from "./fetch.js";
-import { getMockCrypto, mockProvidersEnabled } from "./mock.js";
 
 type CoinGeckoPrice = Record<string, {
   usd?: number;
@@ -13,7 +12,7 @@ export async function validateCoinGeckoId(id: string, env: ResearchEnv): Promise
   const normalized = id.toLowerCase();
 
   if (!env.COINGECKO_API_KEY) {
-    return mockProvidersEnabled(env) && Boolean(getMockCrypto(normalized));
+    return false;
   }
 
   const data = await fetchJsonWithTimeout<CoinGeckoPrice>(
@@ -29,10 +28,7 @@ export async function enrichCrypto(assets: CryptoAsset[], env: ResearchEnv): Pro
   }
 
   if (!env.COINGECKO_API_KEY) {
-    return assets.map((asset) => ({
-      ...asset,
-      ...getMockCrypto(asset.coinGeckoId)
-    }));
+    return [];
   }
 
   const ids = assets.map((asset) => asset.coinGeckoId).join(",");

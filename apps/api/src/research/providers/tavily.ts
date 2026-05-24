@@ -1,6 +1,5 @@
 import type { ResearchEnv, TavilyBudget, TavilyResult } from "../types.js";
 import { fetchJsonWithTimeout } from "./fetch.js";
-import { mockProvidersEnabled, mockTavilyResults } from "./mock.js";
 
 const tavilyCache = new Map<string, { expiresAt: number; results: TavilyResult[] }>();
 
@@ -35,7 +34,7 @@ export async function tavilySearch(
   }
 
   if (!env.TAVILY_API_KEY) {
-    return cacheResults(query, searchDepth, mockProvidersEnabled(env) ? mockTavilyResults(query) : []);
+    return cacheResults(query, searchDepth, []);
   }
 
   const results = await rawTavilySearch(query, env.TAVILY_API_KEY, searchDepth);

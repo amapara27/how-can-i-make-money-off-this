@@ -37,7 +37,7 @@ test("rejects requests without text or image", () => {
   assert.equal(result.ok, false);
 });
 
-test("runs a mock local research job to completion", async () => {
+test("completes without provider-backed assets when API keys are absent", async () => {
   const jobs = createJobStore();
   const job = jobs.create({
     selectedText: "Bitcoin ETF inflows hit a record",
@@ -53,12 +53,13 @@ test("runs a mock local research job to completion", async () => {
       url: "https://example.com/bitcoin",
       title: "Bitcoin ETF news"
     }
-  }, jobs, { HCIMOT_MOCK_PROVIDERS: "true" });
+  }, jobs, emptyProviderEnv());
 
   const completed = jobs.get(job.jobId);
   assert.equal(completed?.status, "complete");
-  assert.equal(completed?.result?.assets.crypto[0]?.coinGeckoId, "bitcoin");
-  assert.equal(completed?.result?.isActionable, true);
+  assert.equal(completed?.result?.assets.crypto.length, 0);
+  assert.equal(completed?.result?.assets.equities.length, 0);
+  assert.equal(completed?.result?.isActionable, false);
 });
 
 test("returns a safe low-investability result when no angle is verified", async () => {
@@ -77,7 +78,7 @@ test("returns a safe low-investability result when no angle is verified", async 
       url: "https://example.com/meme",
       title: "Meme"
     }
-  }, jobs, { HCIMOT_MOCK_PROVIDERS: "true" });
+  }, jobs, emptyProviderEnv());
 
   const completed = jobs.get(job.jobId);
   assert.equal(completed?.status, "complete");
@@ -138,9 +139,10 @@ test("omits unverified tickers and tokens", async () => {
     investabilityReason: "Contains direct assets."
   };
 
-  const verified = await validateResolvedAssets(resolved, { HCIMOT_MOCK_PROVIDERS: "true" });
-  assert.deepEqual(verified.equityTickers.map((asset) => asset.ticker), ["NVDA"]);
-  assert.deepEqual(verified.cryptoTokens.map((asset) => asset.coinGeckoId), ["bitcoin"]);
+  const verified = await validateResolvedAssets(resolved, emptyProviderEnv());
+  assert.deepEqual(verified.equityTickers, []);
+  assert.deepEqual(verified.cryptoTokens, []);
+  assert.equal(verified.investability, "low");
 });
 
 test("times out slow provider calls", async () => {
@@ -151,7 +153,7 @@ test("times out slow provider calls", async () => {
 });
 
 test("research API creates and polls a job", async () => {
-  configureMockApiEnv();
+  configureEmptyApiEnv();
   const { server } = await import("../index.js");
   const baseUrl = await listen(server);
 
@@ -177,14 +179,14 @@ test("research API creates and polls a job", async () => {
 
     const completed = await pollJob(baseUrl, payload.jobId);
     assert.equal(completed.status, "complete");
-    assert.equal(completed.result?.assets.crypto[0]?.coinGeckoId, "bitcoin");
+    assert.equal(completed.result?.isActionable, false);
   } finally {
     await close(server);
   }
 });
 
 test("research API returns a 400 for malformed JSON", async () => {
-  configureMockApiEnv();
+  configureEmptyApiEnv();
   const { server } = await import("../index.js");
   const baseUrl = await listen(server);
 
@@ -220,15 +222,25 @@ async function pollJob(baseUrl: string, jobId: string): Promise<ResearchJob> {
   throw new Error("Timed out waiting for research job.");
 }
 
-function configureMockApiEnv() {
+function configureEmptyApiEnv() {
   process.env.NODE_ENV = "test";
   process.env.ANTHROPIC_API_KEY = "";
   process.env.TAVILY_API_KEY = "";
   process.env.POLYGON_API_KEY = "";
   process.env.COINGECKO_API_KEY = "";
   process.env.ETHERSCAN_API_KEY = "";
-  process.env.HCIMOT_MOCK_PROVIDERS = "true";
   process.env.HCIMOT_ENABLE_SEC_SEARCH = "false";
+}
+
+function emptyProviderEnv() {
+  return {
+    ANTHROPIC_API_KEY: "",
+    TAVILY_API_KEY: "",
+    POLYGON_API_KEY: "",
+    COINGECKO_API_KEY: "",
+    ETHERSCAN_API_KEY: "",
+    HCIMOT_ENABLE_SEC_SEARCH: "false"
+  };
 }
 
 function listen(server: Server) {

@@ -16,7 +16,6 @@ import {
 } from "./prompts.js";
 import { validateCoinGeckoId } from "./providers/coingecko.js";
 import { withTimeout } from "./providers/fetch.js";
-import { mockProvidersEnabled } from "./providers/mock.js";
 import { validateTicker } from "./providers/polygon.js";
 import { tavilySearch } from "./providers/tavily.js";
 import {
@@ -191,7 +190,7 @@ async function synthesizeResult(
   const hasAssets = equities.length > 0 || crypto.length > 0;
   const investability = hasAssets ? resolved.investability : "unsupported";
   const sources = dedupeSources(flattenSources(agents));
-  const caveats = buildCaveats(env, hasAssets, sources.length);
+  const caveats = buildCaveats(hasAssets, sources.length);
 
   return {
     query: input.selectedText ?? input.image?.altText ?? input.page.title,
@@ -269,7 +268,7 @@ function deterministicSynthesis(resolved: ResolvedEntities, agents: AgentOutputs
 }
 
 function buildOpportunities(equities: EquityAsset[], crypto: CryptoAsset[], sources: ResearchSource[]): MoneyAngle[] {
-  const sourceUrls = sources.map((source) => source.url).filter((url) => !url.startsWith("mock://")).slice(0, 3);
+  const sourceUrls = sources.map((source) => source.url).slice(0, 3);
 
   return [
     ...equities.map<MoneyAngle>((asset) => ({
@@ -291,12 +290,8 @@ function buildOpportunities(equities: EquityAsset[], crypto: CryptoAsset[], sour
   ];
 }
 
-function buildCaveats(env: ResearchEnv, hasAssets: boolean, sourceCount: number) {
+function buildCaveats(hasAssets: boolean, sourceCount: number) {
   const caveats = ["Not financial advice."];
-
-  if (mockProvidersEnabled(env) && (!env.POLYGON_API_KEY || !env.COINGECKO_API_KEY || !env.TAVILY_API_KEY)) {
-    caveats.push("Local mock provider mode is active for missing API keys; use real provider keys before relying on market data.");
-  }
 
   if (!hasAssets) {
     caveats.push("No real way to take advantage of this highlight was verified by the configured providers.");

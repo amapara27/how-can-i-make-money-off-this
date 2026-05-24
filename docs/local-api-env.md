@@ -1,8 +1,8 @@
 # Local API Environment
 
-The local Node backend runs without real API keys by default. Missing providers use conservative mock mode where only a tiny allowlist of well-known assets can be returned, and every result includes a caveat that mock provider mode is active.
+The local Node backend loads real provider credentials from `apps/.env`. Missing provider keys fail closed: the backend will not fabricate market data, source links, tickers, tokens, or prices.
 
-At startup, `apps/api` automatically loads environment variables from `apps/.env`. Existing shell environment variables take priority over values in that file.
+At startup, `apps/api` uses `dotenv` to load environment variables from `apps/.env`. Existing shell environment variables take priority over values in that file.
 
 ## Environment Variables
 
@@ -12,20 +12,17 @@ PORT=8787
 # Claude. If omitted, local deterministic extraction/resolution/synthesis is used.
 ANTHROPIC_API_KEY=
 
-# Search and market data providers. If omitted, mock providers are used unless disabled.
+# Search and market data providers. If omitted, the matching provider returns no data.
 TAVILY_API_KEY=
 POLYGON_API_KEY=
 COINGECKO_API_KEY=
 ETHERSCAN_API_KEY=
 
-# Defaults to true. Set false to omit all unverified mock assets when provider keys are missing.
-HCIMOT_MOCK_PROVIDERS=true
-
 # Defaults to false so local tests do not make an unauthenticated SEC request.
 HCIMOT_ENABLE_SEC_SEARCH=false
 ```
 
-## Mock Requests
+## Example Requests
 
 Start the API:
 
@@ -61,7 +58,7 @@ curl -s http://localhost:8787/research \
   }'
 ```
 
-If `HCIMOT_MOCK_PROVIDERS=false` and real provider keys are absent, the backend should complete the job with no actionable assets instead of inventing tickers or tokens.
+If real provider keys are absent, the backend should complete the job with no actionable assets instead of inventing tickers or tokens.
 
 ## Extension Note
 
