@@ -5,6 +5,8 @@ const ROOT_ID = "hcimot-extension-root";
 const MIN_SELECTION_LENGTH = 2;
 const TRIGGER_TEXT = "How Can You Make Money Off This?";
 const OPEN_RESEARCH_REPORT = "OPEN_RESEARCH_REPORT";
+const SAVE_RESEARCH_SESSION = "SAVE_RESEARCH_SESSION";
+const UPDATE_RESEARCH_SESSION = "UPDATE_RESEARCH_SESSION";
 const DEFAULT_API_BASE_URL = "http://localhost:8787";
 const API_BASE_URL = (import.meta.env.VITE_RESEARCH_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/+$/, "");
 
@@ -262,10 +264,10 @@ async function startResearch(capture: Capture) {
   const requestId = crypto.randomUUID();
   const context = await buildSelectionContext(capture, requestId);
 
-  await saveResearchSession(requestId, { context });
   renderPanel(capture, { status: "loading", requestId, stage: "queued" });
 
   try {
+    await saveResearchSession(requestId, { context });
     const created = await createResearchJob(toResearchInput(context), researchController.signal);
     await updateResearchSession(requestId, { jobId: created.jobId });
 
@@ -419,30 +421,39 @@ function delay(ms: number, signal?: AbortSignal) {
 }
 
 async function saveResearchSession(requestId: string, session: { context: SelectionContext; jobId?: string; job?: ResearchJob }) {
-  await chrome.storage.session.set({
-    [storageKey(requestId)]: session
+  await sendRuntimeMessage({
+    type: SAVE_RESEARCH_SESSION,
+    requestId,
+    session
   });
 }
 
 async function updateResearchSession(requestId: string, patch: { jobId?: string; job?: ResearchJob }) {
-  const key = storageKey(requestId);
-  const result = await chrome.storage.session.get(key);
-  const current = result[key] as { context: SelectionContext; jobId?: string; job?: ResearchJob } | undefined;
-
-  if (!current) {
-    return;
-  }
-
-  await chrome.storage.session.set({
-    [key]: {
-      ...current,
-      ...patch
-    }
+  await sendRuntimeMessage({
+    type: UPDATE_RESEARCH_SESSION,
+    requestId,
+    patch
   });
 }
 
-function storageKey(requestId: string) {
-  return `research:${requestId}`;
+function sendRuntimeMessage(message: unknown) {
+  return new Promise<void>((resolve, reject) => {
+    chrome.runtime.sendMessage(message, (response?: ExtensionResponseMessage) => {
+      const runtimeError = chrome.runtime.lastError;
+
+      if (runtimeError) {
+        reject(new Error(runtimeError.message));
+        return;
+      }
+
+      if (response && "ok" in response && !response.ok) {
+        reject(new Error(response.error));
+        return;
+      }
+
+      resolve();
+    });
+  });
 }
 
 async function imageUrlToHighlight(imageUrl: string, altText: string) {
