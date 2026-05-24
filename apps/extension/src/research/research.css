@@ -42,6 +42,15 @@ a {
   font-size: 13px;
 }
 
+.sourcePanel img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #d8e5e0;
+}
+
 blockquote {
   margin: 12px 0 0;
   padding: 16px;
@@ -74,6 +83,14 @@ blockquote {
   line-height: 1.1;
 }
 
+.workspaceHeader p:not(.eyebrow) {
+  max-width: 760px;
+  margin: 10px 0 0;
+  color: #50645e;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
 .workspaceHeader span {
   color: #5d716b;
   font-size: 13px;
@@ -93,6 +110,40 @@ blockquote {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
+}
+
+.metricGrid,
+.assetGrid,
+.opportunityList {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #d8e5e0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.metric span,
+.assetCard span,
+.opportunity span,
+.sourceList span {
+  display: block;
+  margin-bottom: 6px;
+  color: #5d716b;
+  font-size: 12px;
+}
+
+.metric strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #142622;
+  font-size: 18px;
+  line-height: 1.15;
 }
 
 .researchSection {
@@ -126,6 +177,180 @@ blockquote {
   line-height: 1.45;
 }
 
+.researchSection.isWide {
+  grid-column: 1 / -1;
+}
+
+.researchSection.isNotice {
+  border-color: #edc56c;
+  background: #fff8e7;
+}
+
+.researchSection.isLoading span {
+  display: block;
+  height: 10px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #d8e5e0;
+  position: relative;
+}
+
+.researchSection.isLoading span::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(20, 184, 166, 0.2), transparent);
+  animation: scan 1.4s ease-in-out infinite;
+  content: "";
+}
+
+.dataSection {
+  display: grid;
+  gap: 12px;
+}
+
+.sectionTitle h3 {
+  margin: 0;
+  color: #142622;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.assetCard,
+.opportunity {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #d8e5e0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.assetCard > div,
+.opportunity > div {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.assetCard strong,
+.opportunity strong {
+  color: #142622;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.assetCard h4,
+.opportunity h4 {
+  margin: 0;
+  color: #142622;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.assetCard p,
+.opportunity p,
+.sourceList p {
+  margin: 0;
+  color: #50645e;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.assetCard dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.assetCard dl div {
+  min-width: 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: #f2f7f4;
+}
+
+.assetCard dt {
+  margin-bottom: 3px;
+  color: #5d716b;
+  font-size: 11px;
+}
+
+.assetCard dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #142622;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sourceLinks,
+.tagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sourceLinks a,
+.tagList li {
+  padding: 6px 9px;
+  border: 1px solid #cbded7;
+  border-radius: 999px;
+  background: #f8fbf9;
+  color: #0f766e;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.detailList {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.detailList li {
+  padding: 14px;
+  border: 1px solid #d8e5e0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #243a35;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.tagList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sourceList {
+  display: grid;
+  gap: 10px;
+}
+
+.sourceList a {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid #d8e5e0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: inherit;
+  text-decoration: none;
+}
+
+.sourceList strong {
+  color: #142622;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
 .caveats {
   display: flex;
   flex-wrap: wrap;
@@ -157,6 +382,16 @@ blockquote {
   line-height: 1.5;
 }
 
+@keyframes scan {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
 @media (max-width: 900px) {
   .researchPage {
     grid-template-columns: 1fr;
@@ -168,6 +403,12 @@ blockquote {
   }
 
   .sectionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .metricGrid,
+  .assetGrid,
+  .opportunityList {
     grid-template-columns: 1fr;
   }
 
