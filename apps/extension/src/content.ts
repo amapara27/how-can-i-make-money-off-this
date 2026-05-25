@@ -501,9 +501,10 @@ function renderPanel(capture: Capture, state: PanelState) {
 
   panel.replaceChildren(
     buildPanelHeader(capture, state),
-    buildCapturePreview(capture),
+    buildResearchOverview(capture, state),
     buildMetrics(state),
     buildMoneyAngles(capture, state),
+    buildCapturePreview(capture),
     buildFooter(state)
   );
   panel.hidden = false;
@@ -519,7 +520,7 @@ function buildPanelHeader(capture: Capture, state: PanelState) {
   source.textContent = `${getHostname(capture.pageUrl)} / ${capture.kind}`;
 
   const title = document.createElement("h2");
-  title.textContent = capture.title;
+  title.textContent = state.status === "ready" ? state.result.topic.name : capture.title;
 
   const running = document.createElement("span");
   running.className = "hcimot-running";
@@ -571,6 +572,58 @@ function buildCapturePreview(capture: Capture) {
   return preview;
 }
 
+function buildResearchOverview(capture: Capture, state: PanelState) {
+  const overview = document.createElement("section");
+  overview.className = "hcimot-overview";
+
+  const copy = document.createElement("div");
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "hcimot-eyebrow";
+  eyebrow.textContent = "Research overview";
+
+  const title = document.createElement("h3");
+  const body = document.createElement("p");
+
+  copy.append(eyebrow, title, body);
+
+  if (state.status === "ready") {
+    const route = getPrimaryRoute(state.result, capture);
+    title.textContent = route.title;
+    body.textContent = route.text;
+    overview.append(copy, buildScoreRing(state.result.topic.confidence));
+    return overview;
+  }
+
+  if (state.status === "error") {
+    title.textContent = "Research unavailable";
+    body.textContent = state.message;
+    overview.classList.add("is-error");
+    overview.append(copy, buildScoreRing(0, "n/a"));
+    return overview;
+  }
+
+  title.textContent = "Mapping investment routes";
+  body.textContent = "Agents are resolving assets, sources, risks, and the cleanest possible way in.";
+  overview.append(copy, buildScoreRing(0, "..."));
+  return overview;
+}
+
+function buildScoreRing(score: number, label = String(clampScore(score))) {
+  const scoreRing = document.createElement("div");
+  scoreRing.className = "hcimot-scoreRing";
+  scoreRing.style.setProperty("--hcimot-score", `${clampScore(score) * 3.6}deg`);
+  scoreRing.setAttribute("aria-label", `Opportunity score ${label}`);
+
+  const value = document.createElement("strong");
+  value.textContent = label;
+
+  const caption = document.createElement("span");
+  caption.textContent = "Opp score";
+
+  scoreRing.append(value, caption);
+  return scoreRing;
+}
+
 function buildMetrics(state: PanelState) {
   const metrics = document.createElement("section");
   metrics.className = "hcimot-metrics";
@@ -615,7 +668,7 @@ function buildMoneyAngles(capture: Capture, state: PanelState) {
   section.className = "hcimot-angles";
 
   if (state.status === "loading") {
-    for (const label of ["Direct exposure", "Market routes", "Business angle"]) {
+    for (const label of ["Direct exposure", "Market route"]) {
       const row = document.createElement("article");
       row.className = "hcimot-angle hcimot-angleLoading";
       const title = document.createElement("h3");
@@ -682,11 +735,61 @@ function buildMoneyAngles(capture: Capture, state: PanelState) {
   return section;
 }
 
+function getPrimaryRoute(result: ResearchResult, capture: Capture) {
+  const opportunity = result.opportunities[0];
+
+  if (opportunity) {
+    return {
+      title: opportunity.title,
+      value: `${titleCase(opportunity.confidence)} ${opportunity.type}`,
+      text: opportunity.rationale
+    };
+  }
+
+  const equity = [...result.assets.equities].sort((a, b) => b.relevanceScore - a.relevanceScore)[0];
+
+  if (equity) {
+    return {
+      title: `${equity.ticker} ${equity.name}`,
+      value: `${equity.relevanceScore}/100`,
+      text: equity.rationale
+    };
+  }
+
+  const crypto = [...result.assets.crypto].sort((a, b) => b.relevanceScore - a.relevanceScore)[0];
+
+  if (crypto) {
+    return {
+      title: `${crypto.symbol} ${crypto.name}`,
+      value: `${crypto.relevanceScore}/100`,
+      text: crypto.rationale
+    };
+  }
+
+  const step = result.howToGetIn[0];
+
+  if (step) {
+    return {
+      title: "Research-first entry",
+      value: titleCase(result.topic.investability),
+      text: step
+    };
+  }
+
+  const topic = capture.kind === "image" ? "this image" : `"${capture.title}"`;
+
+  return {
+    title: result.isActionable ? "Keep on watchlist" : "No verified route",
+    value: titleCase(result.topic.investability),
+    text: result.topic.investabilityReason || `Research ${topic} further before acting.`
+  };
+}
+
 function getInlineAngles(result: ResearchResult, capture: Capture) {
-  const opportunities = result.opportunities.slice(0, 3).map((opportunity) => ({
+  const opportunities = result.opportunities.slice(0, 2).map((opportunity) => ({
     title: opportunity.title,
     value: `${titleCase(opportunity.confidence)} ${opportunity.type}`,
-    text: opportunity.rationale
+    text: opportunity.howToAccess || opportunity.rationale
   }));
 
   if (opportunities.length > 0) {
@@ -694,12 +797,12 @@ function getInlineAngles(result: ResearchResult, capture: Capture) {
   }
 
   const assetAngles = [
-    ...result.assets.equities.slice(0, 2).map((asset) => ({
+    ...result.assets.equities.slice(0, 1).map((asset) => ({
       title: `${asset.ticker} ${asset.name}`,
       value: formatPercent(asset.dayChangePercent) ?? `${asset.relevanceScore}/100`,
       text: asset.rationale
     })),
-    ...result.assets.crypto.slice(0, 2).map((asset) => ({
+    ...result.assets.crypto.slice(0, 1).map((asset) => ({
       title: `${asset.symbol} ${asset.name}`,
       value: formatCurrency(asset.priceUsd) ?? `${asset.relevanceScore}/100`,
       text: asset.rationale
@@ -707,12 +810,12 @@ function getInlineAngles(result: ResearchResult, capture: Capture) {
   ];
 
   if (assetAngles.length > 0) {
-    return assetAngles.slice(0, 3);
+    return assetAngles.slice(0, 2);
   }
 
   const topic = capture.kind === "image" ? "this image" : `"${capture.title}"`;
 
-  return result.howToGetIn.slice(0, 3).map((step, index) => ({
+  return result.howToGetIn.slice(0, 2).map((step, index) => ({
     title: index === 0 ? "How to get in" : "Next step",
     value: result.isActionable ? titleCase(result.topic.investability) : "Low",
     text: step || `Research ${topic} further before acting.`
@@ -777,11 +880,33 @@ function buildRiskMeter(riskLevel: ResearchResult["thesis"]["riskLevel"], bearCa
     blocks.appendChild(block);
   }
 
-  const copy = document.createElement("p");
-  copy.textContent = bearCase;
+  const copy = document.createElement("ul");
+  copy.className = "hcimot-riskBullets";
+
+  for (const point of summarizeRiskPoints(bearCase)) {
+    const item = document.createElement("li");
+    item.textContent = point;
+    copy.appendChild(item);
+  }
 
   risk.append(label, blocks, copy);
   return risk;
+}
+
+function summarizeRiskPoints(value: string) {
+  const sentences = value
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  const points = sentences.length > 0 ? sentences : [value.trim()];
+
+  return points.slice(0, 3).map((point) => {
+    const withoutTrailingPunctuation = point.replace(/[.!?]+$/, "");
+    return withoutTrailingPunctuation.length > 96
+      ? `${withoutTrailingPunctuation.slice(0, 93).trim()}...`
+      : withoutTrailingPunctuation;
+  });
 }
 
 function buildFooter(state: PanelState) {
@@ -806,8 +931,11 @@ function ensureRoot() {
 
   const style = document.createElement("style");
   style.textContent = `
+    @import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap");
+
     :host {
       color-scheme: dark;
+      --hcimot-font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
     .hcimot-trigger,
@@ -826,11 +954,12 @@ function ensureRoot() {
       min-height: 38px;
       max-width: min(286px, calc(100vw - 20px));
       padding: 0 12px;
-      border: 1px solid #2f3a2a;
+      border: 1px solid rgba(200, 255, 0, 0.55);
       border-radius: 8px;
-      background: #d6ff62;
+      background: #c8ff00;
       color: #10140d;
-      font: 500 13px/1.2 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28), 0 0 24px rgba(200, 255, 0, 0.22);
+      font: 700 13px/1.2 var(--hcimot-font-sans);
       white-space: nowrap;
       cursor: pointer;
     }
@@ -855,15 +984,16 @@ function ensureRoot() {
       right: 16px;
       display: grid;
       gap: 12px;
-      width: min(390px, calc(100vw - 32px));
+      width: min(398px, calc(100vw - 32px));
       max-height: calc(100vh - 32px);
       overflow: auto;
-      padding: 14px;
-      border: 1px solid #2a2a2a;
+      padding: 12px;
+      border: 1px solid #2a2d2f;
       border-radius: 8px;
-      background: #0d0d0d;
-      color: #eeeeee;
-      font: 400 13px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #080909;
+      color: #f4f7f1;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.46);
+      font: 400 13px/1.45 var(--hcimot-font-sans);
     }
 
     .hcimot-panelHeader {
@@ -871,6 +1001,10 @@ function ensureRoot() {
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 12px;
       align-items: start;
+      padding: 16px;
+      border: 1px solid #252a21;
+      border-radius: 8px;
+      background: #171a15;
     }
 
     .hcimot-source {
@@ -879,11 +1013,13 @@ function ensureRoot() {
       margin: 0 0 8px;
       overflow: hidden;
       padding: 4px 7px;
-      border: 1px solid #303030;
+      border: 1px solid rgba(200, 255, 0, 0.24);
       border-radius: 999px;
-      color: #a7a7a7;
-      font: 400 11px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      background: rgba(200, 255, 0, 0.06);
+      color: #cdd6bd;
+      font: 700 11px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       text-overflow: ellipsis;
+      text-transform: uppercase;
       white-space: nowrap;
     }
 
@@ -891,8 +1027,8 @@ function ensureRoot() {
       display: -webkit-box;
       margin: 0;
       overflow: hidden;
-      color: #f4f4f4;
-      font: 500 22px/1.1 Inter, ui-sans-serif, system-ui, sans-serif;
+      color: #f2f4ee;
+      font: 800 27px/1.05 var(--hcimot-font-sans);
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 2;
     }
@@ -902,42 +1038,48 @@ function ensureRoot() {
       gap: 7px;
       align-items: center;
       margin-top: 8px;
-      color: #8c8c8c;
-      font-size: 12px;
+      color: #a4aa9d;
+      font-size: 13px;
+      text-transform: lowercase;
     }
 
     .hcimot-running span {
       width: 8px;
       height: 8px;
       border-radius: 999px;
-      background: #d6ff62;
+      background: #c8ff00;
       animation: hcimot-pulse 1.8s ease-in-out infinite;
     }
 
     .hcimot-close {
-      min-width: 48px;
-      min-height: 30px;
-      border: 1px solid #303030;
+      min-width: 58px;
+      min-height: 34px;
+      border: 1px solid #34383a;
       border-radius: 6px;
-      background: #171717;
-      color: #d7d7d7;
-      font: 500 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+      background: #151619;
+      color: #eef2e6;
+      font: 700 13px/1 var(--hcimot-font-sans);
       cursor: pointer;
+    }
+
+    .hcimot-close:hover {
+      border-color: rgba(200, 255, 0, 0.55);
+      color: #c8ff00;
     }
 
     .hcimot-preview {
       display: grid;
       gap: 10px;
-      padding: 10px;
-      border: 1px solid #242424;
+      padding: 12px;
+      border: 1px solid #24262a;
       border-radius: 8px;
-      background: #141414;
+      background: #111315;
     }
 
     .hcimot-preview img {
       display: block;
       width: 100%;
-      max-height: 150px;
+      max-height: 120px;
       object-fit: cover;
       border-radius: 6px;
     }
@@ -946,33 +1088,106 @@ function ensureRoot() {
       display: -webkit-box;
       margin: 0;
       overflow: hidden;
-      color: #cfcfcf;
+      color: #a4aa9d;
       font-size: 12px;
       -webkit-box-orient: vertical;
-      -webkit-line-clamp: 4;
+      -webkit-line-clamp: 2;
+    }
+
+    .hcimot-overview {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 92px;
+      gap: 12px;
+      align-items: center;
+      padding: 15px;
+      border: 1px solid #27292c;
+      border-radius: 8px;
+      background: #141518;
+    }
+
+    .hcimot-overview.is-error {
+      border-color: rgba(248, 113, 113, 0.28);
+      background: rgba(69, 10, 10, 0.28);
+    }
+
+    .hcimot-eyebrow {
+      margin: 0 0 8px;
+      color: #cdd6bd;
+      font: 700 12px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      text-transform: uppercase;
+    }
+
+    .hcimot-overview h3 {
+      display: -webkit-box;
+      margin: 0;
+      overflow: hidden;
+      color: #c8ff00;
+      font: 800 20px/1.12 var(--hcimot-font-sans);
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .hcimot-overview p:not(.hcimot-eyebrow) {
+      display: -webkit-box;
+      margin: 8px 0 0;
+      overflow: hidden;
+      color: #d6dbc9;
+      font-size: 13px;
+      line-height: 1.45;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+    }
+
+    .hcimot-scoreRing {
+      --hcimot-score: 0deg;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      width: 86px;
+      height: 86px;
+      border-radius: 999px;
+      background:
+        radial-gradient(circle at center, #111313 58%, transparent 59%),
+        conic-gradient(#c8ff00 var(--hcimot-score), #27292c 0);
+      box-shadow: 0 0 28px rgba(200, 255, 0, 0.18);
+    }
+
+    .hcimot-scoreRing strong {
+      color: #c8ff00;
+      font: 700 25px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    .hcimot-scoreRing span {
+      margin-top: 5px;
+      color: #cdd6bd;
+      font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      text-transform: uppercase;
     }
 
     .hcimot-metrics {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
     }
 
     .hcimot-metrics div {
       min-width: 0;
-      padding: 9px 8px;
-      border: 1px solid #242424;
+      padding: 12px;
+      border: 1px solid #24262a;
       border-radius: 8px;
-      background: #121212;
+      background: #151619;
     }
 
     .hcimot-metrics span {
       display: block;
-      margin-bottom: 4px;
+      margin-bottom: 8px;
       overflow: hidden;
-      color: #858585;
+      color: #cdd6bd;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       font-size: 11px;
+      font-weight: 700;
       text-overflow: ellipsis;
+      text-transform: uppercase;
       white-space: nowrap;
     }
 
@@ -980,10 +1195,14 @@ function ensureRoot() {
     .hcimot-angle strong {
       display: block;
       overflow: hidden;
-      color: #f1f1f1;
-      font: 500 13px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      color: #f4f7f1;
+      font: 800 20px/1.05 var(--hcimot-font-sans);
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .hcimot-metrics div:first-child strong {
+      color: #c8ff00;
     }
 
     .hcimot-angles {
@@ -994,13 +1213,15 @@ function ensureRoot() {
     .hcimot-angle {
       display: grid;
       gap: 8px;
-      padding: 11px;
+      padding: 13px;
+      border: 1px solid #24262a;
       border-radius: 8px;
-      background: #151515;
+      background: #151619;
     }
 
     .hcimot-angle:hover {
-      background: #191d15;
+      border-color: rgba(200, 255, 0, 0.24);
+      background: #181b15;
     }
 
     .hcimot-angle div {
@@ -1012,34 +1233,35 @@ function ensureRoot() {
 
     .hcimot-angle h3 {
       margin: 0;
-      color: #eeeeee;
-      font: 500 13px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
+      color: #eef2e6;
+      font: 800 15px/1.2 var(--hcimot-font-sans);
     }
 
     .hcimot-angle p {
       margin: 0;
-      color: #a7a7a7;
-      font-size: 12px;
+      color: #d6dbc9;
+      font-size: 13px;
+      line-height: 1.45;
     }
 
     .hcimot-angleLoading {
-      min-height: 82px;
+      min-height: 78px;
     }
 
     .hcimot-skeleton {
       display: block;
-      height: 10px;
+      height: 9px;
       width: 100%;
       overflow: hidden;
       border-radius: 999px;
-      background: #242424;
+      background: #292d2d;
       position: relative;
     }
 
     .hcimot-skeleton::after {
       position: absolute;
       inset: 0;
-      background: linear-gradient(90deg, transparent, rgba(214, 255, 98, 0.14), transparent);
+      background: linear-gradient(90deg, transparent, rgba(200, 255, 0, 0.22), transparent);
       animation: hcimot-scan 1.4s ease-in-out infinite;
       content: "";
     }
@@ -1049,7 +1271,7 @@ function ensureRoot() {
       grid-template-columns: auto 1fr;
       gap: 8px 12px;
       align-items: center;
-      padding: 11px;
+      padding: 13px;
       border: 1px solid #302313;
       border-radius: 8px;
       background: #17130e;
@@ -1077,21 +1299,47 @@ function ensureRoot() {
       background: #ba7517;
     }
 
-    .hcimot-risk p {
+    .hcimot-riskBullets {
       grid-column: 1 / -1;
+      display: grid;
+      gap: 7px;
       margin: 0;
+      padding: 0;
       color: #b8a58d;
-      font-size: 12px;
+      font-size: 12.5px;
+      line-height: 1.35;
+      list-style: none;
+    }
+
+    .hcimot-riskBullets li {
+      display: grid;
+      grid-template-columns: 7px 1fr;
+      gap: 8px;
+      align-items: start;
+    }
+
+    .hcimot-riskBullets li::before {
+      width: 6px;
+      height: 6px;
+      margin-top: 6px;
+      border-radius: 999px;
+      background: #ba7517;
+      content: "";
     }
 
     .hcimot-reportButton {
-      min-height: 36px;
-      border: 1px solid #d6ff62;
+      min-height: 46px;
+      border: 1px solid #c8ff00;
       border-radius: 8px;
-      background: #d6ff62;
+      background: #c8ff00;
       color: #10140d;
-      font: 600 13px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+      box-shadow: 0 0 24px rgba(200, 255, 0, 0.24);
+      font: 800 15px/1 var(--hcimot-font-sans);
       cursor: pointer;
+    }
+
+    .hcimot-reportButton:hover {
+      background: #d8ff32;
     }
 
     .hcimot-reportButton:disabled {
@@ -1100,8 +1348,9 @@ function ensureRoot() {
     }
 
     .hcimot-footer {
-      color: #777777;
-      font-size: 11px;
+      color: #73796e;
+      font: 700 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      text-transform: uppercase;
     }
 
     @keyframes hcimot-pulse {
@@ -1130,6 +1379,14 @@ function ensureRoot() {
         inset: auto 8px 8px;
         width: auto;
         max-height: min(82vh, 640px);
+      }
+
+      .hcimot-overview {
+        grid-template-columns: 1fr;
+      }
+
+      .hcimot-scoreRing {
+        justify-self: start;
       }
 
       .hcimot-metrics {
@@ -1183,6 +1440,10 @@ function formatPercent(value: number | undefined) {
   }
 
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function clampScore(score: number) {
+  return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 function getHostname(url: string) {
